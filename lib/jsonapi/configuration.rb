@@ -261,12 +261,26 @@ module JSONAPI
   end
 
   class << self
-    attr_accessor :configuration
+    attr_writer :configuration
+
+    def configuration
+      @configuration ||= Configuration.new
+    end
   end
 
-  @configuration ||= Configuration.new
-
   def self.configure
-    yield(@configuration)
+    yield(configuration)
+  end
+
+  # Rails 7.2+ made ActiveSupport::Deprecation.warn a private method
+  # This helper provides backward-compatible deprecation warnings
+  def self.warn_deprecated(message)
+    if defined?(ActiveSupport::Deprecation) && ActiveSupport::Deprecation.respond_to?(:warn)
+      # Rails < 7.2
+      ActiveSupport::Deprecation.warn(message)
+    else
+      # Rails 7.2+ or fallback
+      warn "[DEPRECATION] #{message}"
+    end
   end
 end
