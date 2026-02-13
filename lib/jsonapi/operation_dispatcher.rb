@@ -62,7 +62,7 @@ module JSONAPI
     def with_default_handling(&block)
       block.yield
     rescue => e
-      if JSONAPI.configuration.exception_class_whitelisted?(e)
+      if JSONAPI.configuration.exception_class_allowed?(e)
         raise e
       else
         @server_error_callbacks.each { |callback|

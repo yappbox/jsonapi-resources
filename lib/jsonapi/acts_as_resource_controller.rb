@@ -264,7 +264,7 @@ module JSONAPI
       when JSONAPI::Exceptions::Error
         render_errors(e.errors)
       else
-        if JSONAPI.configuration.exception_class_whitelisted?(e)
+        if JSONAPI.configuration.exception_class_allowed?(e)
           fail e
         else
           (self.class.server_error_callbacks || []).each { |callback|
