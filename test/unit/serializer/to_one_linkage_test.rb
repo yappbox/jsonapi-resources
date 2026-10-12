@@ -13,6 +13,19 @@ class LinkageOverriddenReaderPostResource < LinkageByForeignKeyPostResource
   end
 end
 
+class LinkageFallbackAuthorPost < ActiveRecord::Base
+  self.table_name = 'posts'
+  belongs_to :author, class_name: 'Person', foreign_key: 'author_id'
+
+  def author
+    super || Person.find(2)
+  end
+end
+
+class LinkageFallbackAuthorPostResource < LinkageByForeignKeyPostResource
+  model_name 'LinkageFallbackAuthorPost'
+end
+
 class ToOneLinkageTest < ActiveSupport::TestCase
   def test_linkage_reads_the_foreign_key
     posts = Post.where.not(author_id: nil).order(:id).to_a
@@ -48,6 +61,12 @@ class ToOneLinkageTest < ActiveSupport::TestCase
     posts = Post.where.not(author_id: 2).order(:id).limit(2).to_a
 
     assert_equal %w(2 2), creator_ids(LinkageOverriddenReaderPostResource, posts)
+  end
+
+  def test_overridden_model_reader_is_honored
+    post = LinkageFallbackAuthorPost.new(id: 999_999, author_id: nil, title: 'Anonymous')
+
+    assert_equal %w(2), creator_ids(LinkageFallbackAuthorPostResource, [post])
   end
 
   private
