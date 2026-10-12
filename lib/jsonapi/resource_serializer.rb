@@ -504,8 +504,9 @@ module JSONAPI
     end
 
     # The foreign key column, when the relationship's record is determined by that column alone: a plain
-    # belongs_to on the model, read through the builder-generated relationship methods. A resource that
-    # overrides those methods may not map one column value to one record, so it is not eligible.
+    # belongs_to on the model, read through the builder-generated relationship methods and the association
+    # reader Rails generated. A resource or model that overrides those readers may not map one column value
+    # to one record (e.g. falling back to another association when the column is null), so it is not eligible.
     def belongs_to_foreign_key(source, relationship)
       @belongs_to_foreign_keys ||= {}
       key = [source.class, relationship.name]
@@ -530,6 +531,8 @@ module JSONAPI
       reflection = model_class.reflect_on_association(relationship.relation_name(context: source.context))
       return unless reflection && reflection.belongs_to? && !reflection.polymorphic?
       return if reflection.scope && reflection.scope.arity != 0
+      return unless model_class.instance_method(reflection.name).owner ==
+                    reflection.active_record.generated_association_methods
 
       foreign_key = reflection.foreign_key
       foreign_key.is_a?(Array) ? nil : foreign_key.to_s
