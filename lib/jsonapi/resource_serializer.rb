@@ -479,11 +479,60 @@ module JSONAPI
           # which can save quite a lot of time when loading a lot of data.
           # This does not apply to e.g. has_one :through relationships.
           source.public_send("#{relationship.name}_id")
+        elsif !foreign_key_type_changed && (foreign_key = belongs_to_foreign_key(source, relationship))
+          related_id_by_foreign_key(source, relationship, foreign_key)
         else
           source.public_send(relationship.name).try(:id)
         end
       return nil unless related_resource_id
       @id_formatter.format(related_resource_id)
+    end
+
+    # A to-one whose name differs from its column (`has_one :yapp, relation_name: :app, foreign_key: :app_id`)
+    # has no `yapp_id` reader, so its linkage would load the related record once per serialized row. The
+    # result depends only on the foreign key value, so load once per distinct value. Loading rather than
+    # emitting the column keeps `null` linkage when a default scope hides the target (e.g. soft deletes).
+    def related_id_by_foreign_key(source, relationship, foreign_key)
+      value = source._model.read_attribute(foreign_key)
+      return nil if value.nil?
+
+      @related_ids_by_foreign_key ||= {}
+      key = [source.class, relationship.name, value]
+      return @related_ids_by_foreign_key[key] if @related_ids_by_foreign_key.key?(key)
+
+      @related_ids_by_foreign_key[key] = source.public_send(relationship.name).try(:id)
+    end
+
+    # The foreign key column, when the relationship's record is determined by that column alone: a plain
+    # belongs_to on the model, read through the builder-generated relationship methods. A resource that
+    # overrides those methods may not map one column value to one record, so it is not eligible.
+    def belongs_to_foreign_key(source, relationship)
+      @belongs_to_foreign_keys ||= {}
+      key = [source.class, relationship.name]
+      return @belongs_to_foreign_keys[key] if @belongs_to_foreign_keys.key?(key)
+
+      @belongs_to_foreign_keys[key] = compute_belongs_to_foreign_key(source, relationship)
+    end
+
+    def compute_belongs_to_foreign_key(source, relationship)
+      return unless relationship.is_a?(JSONAPI::Relationship::ToOne)
+      return unless relationship.belongs_to? && !relationship.polymorphic?
+
+      resource_klass = source.class
+      return unless [relationship.name, "record_for_#{relationship.name}"].all? do |method_name|
+        resource_klass.method_defined?(method_name) &&
+          JSONAPI::RelationshipBuilder.generated_method?(resource_klass.instance_method(method_name))
+      end
+
+      model_class = resource_klass._model_class
+      return unless model_class.respond_to?(:reflect_on_association)
+
+      reflection = model_class.reflect_on_association(relationship.relation_name(context: source.context))
+      return unless reflection && reflection.belongs_to? && !reflection.polymorphic?
+      return if reflection.scope && reflection.scope.arity != 0
+
+      foreign_key = reflection.foreign_key
+      foreign_key.is_a?(Array) ? nil : foreign_key.to_s
     end
 
     def foreign_key_types_and_values(source, relationship)

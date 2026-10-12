@@ -3,6 +3,11 @@ module JSONAPI
     attr_reader :model_class, :options, :relationship_class
     delegate :register_relationship, to: :@resource_class
 
+    # Whether a resource method is still the one this builder defined, rather than a resource override.
+    def self.generated_method?(unbound_method)
+      unbound_method.source_location&.first == __FILE__
+    end
+
     def initialize(relationship_class, model_class, options)
       @relationship_class = relationship_class
       @model_class        = model_class
